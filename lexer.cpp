@@ -15,10 +15,10 @@ enum Token {
   tok_eof = -1,
 
   // commands
-  tok_FUNC = -2,tok_VAR = -3,tok_IF = -4,tok_ELSE = -5,tok_THEN = -6,tok_FI = -7,tok_WHILE = -8,tok_DO = -9,tok_DONE = -10,tok_RETURN = -11,tok_PRINT = -16,tok_ASSIGN = -17,
-  tok_CONTINUE=-18,
+  tok_FUNC = -2,tok_VAR = -3,tok_IF = -4,tok_ELSE = -5,tok_THEN = -6,tok_FI = -7,tok_WHILE = -8,tok_DO = -9,tok_DONE = -10,tok_RETURN = -11,tok_PRINT = -12,tok_ASSIGN = -13,
+  tok_CONTINUE=-14,tok_main=-15,
   // primary
-  tok_var = -12, tok_number = -13 ,tok_text = -14 ,tok_P=-15,tok_err=-19//²»ÊÇ¹Ø¼ü×ÖµÄ³£Á¿£¨Õâ¸öÏÖ½×¶ÎÃ»É¶ÓÃ£©£¬ÒÔºó¿ÉÒÔÓÃÀ´¶¨Òå³£Á¿»òÕßÖ±½Ó²»ÄÜ¶¨Òå³£Á¿¶ø±¨´í 
+  tok_var = -16 ,tok_number = -17 ,tok_text = -18 ,tok_P=-19,tok_err=-20//ä¸æ˜¯å…³é”®å­—çš„å¸¸é‡ï¼ˆè¿™ä¸ªç°é˜¶æ®µæ²¡å•¥ç”¨ï¼‰ï¼Œä»¥åå¯ä»¥ç”¨æ¥å®šä¹‰å¸¸é‡æˆ–è€…ç›´æ¥ä¸èƒ½å®šä¹‰å¸¸é‡è€ŒæŠ¥é”™ 
 };
 
 static std::string IdentifierStr;  
@@ -55,6 +55,9 @@ static int gettok() {
       IdentifierStr = LastChar;
   	 while(islower(LastChar = getchar())||isdigit(LastChar)){
       IdentifierStr += LastChar;
+	   }
+	   if(IdentifierStr=="main"){
+	   	return tok_main;
 	   }
       return tok_var;
   }
@@ -128,6 +131,13 @@ class VariableExprAST : public ExprAST {
   std::string Name;
 public:
   VariableExprAST(const std::string &name) : Name(name) {}
+};
+/// StarementsExprAST - Expression class for referencing a many of statement.
+class StarementsExprAST : public ExprAST {
+  std::vector<ExprAST*> Statements;
+public:
+  StarementsExprAST(std::vector<ExprAST*> &statements) 
+  	: Statements(statements) {}
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -203,7 +213,14 @@ PrototypeAST *ErrorP(const char *Str) { Error(Str); return 0; }
 FunctionAST *ErrorF(const char *Str) { Error(Str); return 0; }
 
 static ExprAST *ParseExpression();
+static ExprAST *ParseStatement();
 
+static ExprAST *ParseVARExpr() {
+  getNextToken();  // eat tok_VAR.
+	  std::string IdName = IdentifierStr;
+  getNextToken();  // eat identifierStr.
+  return new VariableExprAST(IdName);
+}
 /// identifierexpr
 ///   ::= identifier
 ///   ::= identifier '(' expression* ')'
@@ -264,7 +281,7 @@ static ExprAST *ParseParenExpr() {
 static ExprAST *ParsePrimary() {
   switch (CurTok) {
   default: return Error("unknown token when expecting an expression");
-  case tok_var: return ParseIdentifierExpr();
+  case tok_VAR: return ParseIdentifierExpr();
   case tok_number:     return ParseNumberExpr();
   case '(':            return ParseParenExpr();
   }
@@ -313,23 +330,48 @@ static ExprAST *ParseExpression() {
   return ParseBinOpRHS(0, LHS);
 }
 
-static ExprAST *ParseBody() {
-	
+static ExprAST *ParseBlock() {
+	std::vector<ExprAST*> statements;
   if (CurTok != '{')
     return Error("Expected '{' in Expression");
   getNextToken(); 
-    ExprAST *E=ParseExpression();
+  while (CurTok==tok_VAR) {
+  statements.push_back(ParseVARExpr());
+  };
+  
+  while (CurTok==tok_var||CurTok==tok_RETURN||CurTok==tok_PRINT||CurTok==tok_CONTINUE||CurTok==tok_IF||CurTok==tok_WHILE||CurTok=='{') {
+  statements.push_back(ParseStatement());
+  };
   if (CurTok != '}')
     return Error("Expected '}' in Expression");
-	return E;
+	return new StarementsExprAST(statements);
 }
+
+static ExprAST *ParseStatement() {
+	std::vector<ExprAST*> statements;
+	 switch (CurTok) {
+  default: return Error("unknown token when expecting an expression");
+  case tok_var:  statements.push_back(ParseNumberExpr());
+  case tok_RETURN:  statements.push_back(ParseNumberExpr());
+  case tok_PRINT:     statements.push_back(ParseNumberExpr());
+  case tok_CONTINUE:  statements.push_back(ParseNumberExpr());
+  case tok_IF:     statements.push_back(ParseNumberExpr());
+  case tok_WHILE:     statements.push_back(ParseNumberExpr());
+  case '{':            statements.push_back(ParseBlock());
+  }
+  return new StarementsExprAST(statements);
+}
+
 /// prototype
 ///   ::= id '(' id* ')'
 static PrototypeAST *ParsePrototype() {
-  if (CurTok != tok_var)
+  if (CurTok != tok_var&&CurTok != tok_main)
     return ErrorP("Expected function name in prototype");
 
   std::string FnName = IdentifierStr;
+  if(CurTok==tok_main){
+  	fprintf(stderr, "Main:");
+  }
   getNextToken();
   if (CurTok != '('){
     return ErrorP("Expected '(' in prototype");
@@ -366,7 +408,7 @@ static FunctionAST *ParseFUNC() {
   PrototypeAST *Proto = ParsePrototype();
   if (Proto == 0) return 0;
 
-  if (ExprAST *E = ParseBody())
+  if (ExprAST *E = ParseStatement())
     return new FunctionAST(Proto, E);
   return 0;
 }
@@ -387,9 +429,8 @@ static void MainLoop() {
     fprintf(stderr, "ready> ");
     switch (CurTok) {
     case tok_eof:    return;
-    case ';':        getNextToken(); break;  // ignore top-level semicolons.
     case tok_FUNC:    HandleFUNC(); break;
-    default:         return; break;
+    default:         getNextToken(); break;
     }
   }
 }
@@ -415,4 +456,3 @@ int main() {
 
   return 0;
 }
-
