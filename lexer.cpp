@@ -71,8 +71,8 @@ static int gettok() {
     return tok_number;
   }
   if(LastChar == '"'){
-  	TEXT = LastChar;
-    while ((LastChar = getchar())!='"'||(LastChar = getchar())!='\n')
+  	TEXT = "";
+    while ((LastChar = getchar())!='"'&&LastChar!='\n')
       TEXT += LastChar;
       if(LastChar=='"'){
       LastChar=getchar();
@@ -81,12 +81,11 @@ static int gettok() {
 	  return tok_err;
   }
   if(LastChar == ':'){
+  int ThisChar = LastChar;
     if((LastChar = getchar())=='='){
       LastChar=getchar();
       return tok_ASSIGN;
 	}
-  int ThisChar = LastChar;
-  LastChar = getchar();
   return ThisChar;
   }
 
@@ -139,7 +138,54 @@ public:
   StarementsExprAST(std::vector<ExprAST*> &statements) 
   	: Statements(statements) {}
 };
+/// StarementsExprAST - Expression class for referencing a many of statement.
+class AssignmentExprAST : public ExprAST {
+  std::string Name;
+  ExprAST *Expr;
+public:
+   AssignmentExprAST(const std::string &name,ExprAST *expr) : Name(name) ,Expr(expr){}
+};
+/// IFExprAST - Expression class for if statement.
+class IFExprAST : public ExprAST {
+  ExprAST *Expr;
+  ExprAST *THENExpr;
+  ExprAST *ELSEExpr;
+public:
+   IFExprAST(ExprAST *expr,ExprAST *thenexpr,ExprAST *elseexpr) : Expr(expr) ,THENExpr(thenexpr),ELSEExpr(elseexpr){}
+};
+/// WHILEExprAST - Expression class for  while statement.
+class WHILEExprAST : public ExprAST {
+  ExprAST *Expr;
+  ExprAST *DOExpr;
+public:
+   WHILEExprAST(ExprAST *expr,ExprAST *doexpr) : Expr(expr),DOExpr(doexpr){}
+};
 
+/// PRINTITEMExprAST - Expression class for  printitem statement.
+class PRINTITEMExprAST : public ExprAST {
+  std::string Text;
+  ExprAST *Expr;
+public:
+   PRINTITEMExprAST(const std::string &text,ExprAST *expr) : Text(text),Expr(expr){}
+};
+
+/// PRINTExprAST - Expression class for  printitem statement.
+class PRINTExprAST : public ExprAST {
+  std::vector<ExprAST*> Items;
+public:
+   PRINTExprAST(std::vector<ExprAST*> &items) 
+  	: Items(items) {}
+};
+
+/// RETURNExprAST - Expression class for  return statement.
+class RETURNExprAST : public ExprAST {
+  ExprAST *Expr;
+public:
+   RETURNExprAST(ExprAST *expr) : Expr(expr){}
+};
+/// NULLExprAST - Expression class for continue statement.
+class NULLExprAST : public ExprAST {
+};
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
   char Op;
@@ -330,6 +376,110 @@ static ExprAST *ParseExpression() {
   return ParseBinOpRHS(0, LHS);
 }
 
+static ExprAST *ParseAssignment() {
+	
+  if (CurTok != tok_var)
+    return Error("Expected variable in Expression");
+  std::string IdName = IdentifierStr;  
+  getNextToken(); 
+  if (CurTok!=tok_ASSIGN) 
+  	return Error("Expected ':=' in Expression");
+  getNextToken(); 
+  if (CurTok != tok_number&&CurTok != tok_var&&CurTok !='-'&&CurTok !='(')
+    return Error("Expected an expression in Expression");
+  return new AssignmentExprAST(IdName,ParseExpression());
+}
+
+static ExprAST *ParseIF() {
+	
+  if (CurTok != tok_IF)
+    return Error("Expected IF in Expression");
+    getNextToken(); 
+  ExprAST *ifexpr = ParseExpression();  
+  if (CurTok!=tok_THEN) 
+  	return Error("Expected THEN in Expression");
+  	getNextToken(); 
+  	ExprAST *thenexpr = ParseStatement();  
+  getNextToken(); 
+  ExprAST *elseexpr ;
+  if (CurTok == tok_ELSE){
+  	getNextToken(); 
+    elseexpr= ParseStatement(); 
+  	getNextToken(); 
+  }
+    else{
+    	elseexpr =new ExprAST();
+	}
+	 if (CurTok!=tok_FI) 
+  	return Error("Expected FI in Expression");
+  	getNextToken(); 
+  return new IFExprAST(ifexpr,thenexpr,elseexpr);
+}
+
+static ExprAST *ParseWHILE() {
+	
+  if (CurTok != tok_WHILE)
+    return Error("Expected WHILE in Expression");
+    getNextToken(); 
+  ExprAST * whileexpr = ParseExpression();  
+  if (CurTok!=tok_DO) 
+  	return Error("Expected DO in Expression");
+  	getNextToken(); 
+  	ExprAST *doexpr = ParseStatement();  
+  getNextToken(); 
+	 if (CurTok!=tok_DONE) 
+  	return Error("Expected DONE in Expression");
+  	getNextToken(); 
+  return new WHILEExprAST(whileexpr,doexpr);
+}
+static ExprAST *ParseCONTINUE() {
+	
+  if (CurTok != tok_CONTINUE)
+    return Error("Expected CONTINUE in Expression");
+    getNextToken(); 
+    return new NULLExprAST();
+}
+
+
+static ExprAST *ParseRETURN() {
+	
+  if (CurTok != tok_RETURN)
+    return Error("Expected RETURN in Expression");
+    getNextToken(); 
+    return new RETURNExprAST(ParseExpression());
+}
+
+static ExprAST *ParsePRINTITEM() {
+	
+    if (CurTok!=tok_text&&CurTok != tok_number&&CurTok != tok_var&&CurTok !='-'&&CurTok !='(') 
+  	return Error("Expected epxr or string in Expression");
+  	ExprAST * epxr;
+  	string text;
+  	if(CurTok==tok_text){
+  		text=TEXT;
+  		getNextToken(); 
+	  }
+  	else{
+    	epxr=ParseExpression();
+	  }
+    return new PRINTITEMExprAST(text,epxr);
+}
+
+static ExprAST *ParsePRINT() {
+	std::vector<ExprAST*> items;
+  if (CurTok != tok_PRINT)
+    return Error("Expected PRINT in Expression");
+    getNextToken(); 
+    if (CurTok!=tok_text&&CurTok != tok_number&&CurTok != tok_var&&CurTok !='-'&&CurTok !='(') 
+  	return Error("Expected epxr or string in Expression");
+  	items.push_back(ParsePRINTITEM());
+  	while(CurTok==','){
+  		getNextToken(); 
+  		items.push_back(ParsePRINTITEM());
+	  }
+    return new PRINTExprAST(items);
+}
+
 static ExprAST *ParseBlock() {
 	std::vector<ExprAST*> statements;
   if (CurTok != '{')
@@ -348,16 +498,17 @@ static ExprAST *ParseBlock() {
 }
 
 static ExprAST *ParseStatement() {
+	
 	std::vector<ExprAST*> statements;
 	 switch (CurTok) {
   default: return Error("unknown token when expecting an expression");
-  case tok_var:  statements.push_back(ParseNumberExpr());
-  case tok_RETURN:  statements.push_back(ParseNumberExpr());
-  case tok_PRINT:     statements.push_back(ParseNumberExpr());
-  case tok_CONTINUE:  statements.push_back(ParseNumberExpr());
-  case tok_IF:     statements.push_back(ParseNumberExpr());
-  case tok_WHILE:     statements.push_back(ParseNumberExpr());
-  case '{':            statements.push_back(ParseBlock());
+  case tok_var:  statements.push_back(ParseAssignment());break;
+  case tok_RETURN:  statements.push_back(ParseRETURN());break;
+  case tok_PRINT:     statements.push_back(ParsePRINT());break;
+  case tok_CONTINUE:  statements.push_back(ParseCONTINUE());break;
+  case tok_IF:     statements.push_back(ParseIF());break;
+  case tok_WHILE:     statements.push_back(ParseWHILE());break;
+  case '{':            statements.push_back(ParseBlock());break;
   }
   return new StarementsExprAST(statements);
 }
@@ -408,8 +559,10 @@ static FunctionAST *ParseFUNC() {
   PrototypeAST *Proto = ParsePrototype();
   if (Proto == 0) return 0;
 
-  if (ExprAST *E = ParseStatement())
+  if (ExprAST *E = ParseStatement()){
     return new FunctionAST(Proto, E);
+  }
+  
   return 0;
 }
 
