@@ -17,7 +17,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include<iostream>
+#include <iostream>
 
 using namespace llvm;
 using namespace std;
@@ -52,7 +52,7 @@ enum Token {
   tok_text = -18,
   tok_P = -19,
   tok_err =
-      -20 //不是关键字的常量（这个现阶段没啥用），以后可以用来定义常量或者直接不能定义常量而报错
+      -20 //涓嶆槸鍏抽敭瀛楃殑甯搁噺锛堣繖涓幇闃舵娌″暐鐢級锛屼互鍚庡彲浠ョ敤鏉ュ畾涔夊父閲忔垨鑰呯洿鎺ヤ笉鑳藉畾涔夊父閲忚€屾姤閿?
 };
 
 static std::string IdentifierStr;
@@ -154,7 +154,6 @@ static int gettok() {
   LastChar = getchar();
   return ThisChar;
 }
-
 
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
@@ -260,7 +259,7 @@ class AssignmentExprAST : public ExprAST {
 
 public:
   AssignmentExprAST(const std::string &name, std::unique_ptr<ExprAST> expr)
-      : Name(name), Expr(std::move(expr)){}
+      : Name(name), Expr(std::move(expr)) {}
   Value *codegen() override;
 };
 /// IFExprAST - Expression class for if statement.
@@ -272,7 +271,8 @@ class IFExprAST : public ExprAST {
 public:
   IFExprAST(std::unique_ptr<ExprAST> expr, std::unique_ptr<ExprAST> thenexpr,
             std::unique_ptr<ExprAST> elseexpr)
-      : Expr(std::move(expr)), THENExpr(std::move(thenexpr)), ELSEExpr(std::move(elseexpr)) {}
+      : Expr(std::move(expr)), THENExpr(std::move(thenexpr)),
+        ELSEExpr(std::move(elseexpr)) {}
   Value *codegen() override;
 };
 /// WHILEExprAST - Expression class for  while statement.
@@ -317,6 +317,8 @@ public:
 };
 /// NULLExprAST - Expression class for continue statement.
 class NULLExprAST : public ExprAST {
+public:
+  NULLExprAST() {}
   Value *codegen() override;
 };
 
@@ -502,7 +504,7 @@ static std::unique_ptr<ExprAST> ParseAssignment() {
   if (CurTok != tok_number && CurTok != tok_var && CurTok != '-' &&
       CurTok != '(')
     return LogError("Expected an expression in Expression");
-  return llvm::make_unique<AssignmentExprAST>(IdName,ParseExpression());
+  return llvm::make_unique<AssignmentExprAST>(IdName, std::move(ParseExpression()));
 }
 
 static std::unique_ptr<ExprAST> ParseIF() {
@@ -522,12 +524,13 @@ static std::unique_ptr<ExprAST> ParseIF() {
     elseexpr = ParseStatement();
     getNextToken();
   } else {
-    //elseexpr = llvm::make_unique<NULLExprAST>();
+    // elseexpr = llvm::make_unique<NULLExprAST>();
   }
   if (CurTok != tok_FI)
     return LogError("Expected FI in Expression");
   getNextToken();
-  return llvm::make_unique<IFExprAST>(std::move(ifexpr), std::move(thenexpr), std::move(elseexpr));
+  return llvm::make_unique<IFExprAST>(std::move(ifexpr), std::move(thenexpr),
+                                      std::move(elseexpr));
 }
 
 static std::unique_ptr<ExprAST> ParseWHILE() {
@@ -544,14 +547,14 @@ static std::unique_ptr<ExprAST> ParseWHILE() {
   if (CurTok != tok_DONE)
     return LogError("Expected DONE in Expression");
   getNextToken();
-  return llvm::make_unique<WHILEExprAST>(whileexpr, doexpr);
+  return llvm::make_unique<WHILEExprAST>(std::move(whileexpr), std::move(doexpr));
 }
 static std::unique_ptr<ExprAST> ParseCONTINUE() {
 
   if (CurTok != tok_CONTINUE)
     return LogError("Expected CONTINUE in Expression");
   getNextToken();
-  return  llvm::make_unique<NULLExprAST>();
+  return llvm::make_unique<NULLExprAST>();
 }
 
 static std::unique_ptr<ExprAST> ParseRETURN() {
@@ -559,10 +562,10 @@ static std::unique_ptr<ExprAST> ParseRETURN() {
   if (CurTok != tok_RETURN)
     return LogError("Expected RETURN in Expression");
   getNextToken();
-  return  llvm::make_unique<RETURNExprAST>(ParseExpression());
+  return llvm::make_unique<RETURNExprAST>(std::move(ParseExpression()));
 }
 
-static std::unique_ptr<ExprAST>ParsePRINTITEM() {
+static std::unique_ptr<ExprAST> ParsePRINTITEM() {
 
   if (CurTok != tok_text && CurTok != tok_number && CurTok != tok_var &&
       CurTok != '-' && CurTok != '(')
@@ -613,7 +616,7 @@ static std::unique_ptr<ExprAST> ParseBlock() {
   return llvm::make_unique<StarementsExprAST>(std::move(statements));
 }
 
-static std::unique_ptr<ExprAST>ParseStatement() {
+static std::unique_ptr<ExprAST> ParseStatement() {
 
   std::vector<std::unique_ptr<ExprAST>> statements;
   switch (CurTok) {
@@ -683,7 +686,6 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   return llvm::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
 }
 
-
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseFUNC() {
   if (auto E = ParseStatement()) {
@@ -693,7 +695,6 @@ static std::unique_ptr<FunctionAST> ParseFUNC() {
   }
   return nullptr;
 }
-
 
 //===----------------------------------------------------------------------===//
 // Code Generation
@@ -813,10 +814,7 @@ Function *FunctionAST::codegen() {
   TheFunction->eraseFromParent();
   return nullptr;
 }
-Value *IFExprAST::codegen() {
- 
-  return nullptr;
-}
+Value *IFExprAST::codegen() { return nullptr; }
 Value *AssignmentExprAST::codegen() { return nullptr; }
 Value *StarementsExprAST::codegen() { return nullptr; }
 
@@ -827,8 +825,8 @@ Value *NULLExprAST::codegen() { return nullptr; }
 
 //=
 //------------------------------------------------------------- ==
- //   = //
-    // Top-Level parsing and JIT Driver
+//   = //
+// Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
 static void HandleFUNC() {
