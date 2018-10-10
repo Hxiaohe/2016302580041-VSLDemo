@@ -692,6 +692,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseFUNC() {
   auto Proto = ParsePrototype();
+  if (!Proto)
+    return nullptr;
   if (auto E = ParseStatement()) {
     // Make an anonymous proto.
     return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
