@@ -650,6 +650,9 @@ static std::unique_ptr<ExprAST> ParseStatement() {
 /// prototype
 ///   ::= id '(' id* ')'
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
+  if (CurTok != tok_FUNC)
+    return LogErrorP("Expected FUNC in prototype");
+  getNextToken();
   if (CurTok != tok_var && CurTok != tok_main)
     return LogErrorP("Expected function name in prototype");
 
@@ -688,9 +691,9 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseFUNC() {
+  auto Proto = ParsePrototype();
   if (auto E = ParseStatement()) {
     // Make an anonymous proto.
-    auto Proto = ParsePrototype();
     return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;
