@@ -703,12 +703,13 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
 /// toplevelexpr ::= expression
 static std::unique_ptr<FunctionAST> ParseFUNC() {
-  auto Proto = ParsePrototype();
-  if (!Proto)
+  auto ProtoAST = ParsePrototype();
+  if (!ProtoAST)
     return nullptr;
+  FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
   if (auto E = ParseStatement()) {
     // Make an anonymous proto.
-    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+    return llvm::make_unique<FunctionAST>(std::move(ProtoAST), std::move(E));
   }
   return nullptr;
 }
@@ -844,6 +845,9 @@ Function *FunctionAST::codegen() {
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
+	// Run the optimizer on the function.
+    TheFPM->run(*TheFunction);
+
     return TheFunction;
   }
 
@@ -897,6 +901,8 @@ static void HandleFUNC() {
       fprintf(stderr, "Parsed a FUNC\n");
       FnIR->print(errs());
       fprintf(stderr, "\n");
+      TheJIT->addModule(std::move(TheModule));
+      InitializeModuleAndPassManager();
     }
   } else {
     // Skip token for LogError recovery.
