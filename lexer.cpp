@@ -144,6 +144,10 @@ static int gettok() {
   }
 
   if (LastChar == '/') {
+    int ThisChar = LastChar;
+    if ((LastChar = getchar())!= '/') {
+      return ThisChar;
+    }
     // Comment until end of line.
     do
       LastChar = getchar();
@@ -436,6 +440,27 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
   return llvm::make_unique<CallExprAST>(IdName, std::move(Args));
 }
 
+//取负处理器
+static std::unique_ptr<ExprAST> ParseFuExpr() {
+  auto Result = llvm::make_unique<NumberExprAST>(0);
+  int FuTok= CurTok;
+  getNextToken();
+  switch (CurTok) {
+  default:
+    return LogError("unknown token when expecting an expression");
+  case tok_var:
+    return llvm::make_unique<BinaryExprAST>(FuTok, std::move(Result),
+                                            std::move(ParseIdentifierExpr()));
+  case tok_number:
+    return llvm::make_unique<BinaryExprAST>(FuTok, std::move(Result),
+                                            std::move(ParseNumberExpr()));
+  case '(':
+    return llvm::make_unique<BinaryExprAST>(FuTok, std::move(Result),
+                                            std::move(ParseParenExpr()));
+  }
+ 
+}
+
 /// primary
 ///   ::= identifierexpr
 ///   ::= numberexpr
@@ -450,6 +475,8 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
     return ParseNumberExpr();
   case '(':
     return ParseParenExpr();
+  case '-':
+    return ParseFuExpr();
   }
 }
 
@@ -774,6 +801,8 @@ Value *BinaryExprAST::codegen() {
     return Builder.CreateFSub(L, R, "subtmp");
   case '*':
     return Builder.CreateFMul(L, R, "multmp");
+  case '/':
+    return Builder.CreateFDiv(L, R, "divtmp");
   case '<':
     L = Builder.CreateFCmpULT(L, R, "cmptmp");
     // Convert bool 0/1 to double 0.0 or 1.0
@@ -938,8 +967,6 @@ Value *WHILEExprAST::codegen() {
   EndCond = Builder.CreateFCmpONE(
       EndCond, ConstantFP::get(TheContext, APFloat(0.0)), "loopcond");
 
-  // Create the "after loop" block and insert it.
-  BasicBlock *LoopEndBB = Builder.GetInsertBlock();
   BasicBlock *AfterBB =
       BasicBlock::Create(TheContext, "afterloop", TheFunction);
 
@@ -1028,6 +1055,7 @@ int main() {
   BinopPrecedence['<'] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
+  BinopPrecedence['/'] = 40; 
   BinopPrecedence['*'] = 40; // highest.
 
   // Prime the first token.
